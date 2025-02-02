@@ -1,5 +1,6 @@
 import React, { createContext, useReducer } from "react";
 import { IPackage } from "../../api/getPackages";
+import { DownloadStateKey, stateOrStored, syncLocalStorage } from "../localStorage";
 
 interface IDownload {
   Package: IPackage;
@@ -15,36 +16,43 @@ interface IDownloadContext {
 }
 
 const Downloads: React.Context<IDownloadContext> = createContext(null);
+const initialDownloadState = (localStorage.getItem(DownloadStateKey) || []) as IDownload[];
 
 //TODO: abstract into seperate file
 function downloadsReducer(state: IDownload[], action) {
+  let newState: IDownload[] = stateOrStored(DownloadStateKey, state);
   switch (action.type) {
     case "add":
-      return [
-        ...state,
+      newState = [
+        ...newState,
         { Package: action.payload, Version: action.payload.Versions[0] },
       ];
+      break;
     case "remove":
-      return state.filter((e) => e.Package.Id !== action.payload.Id);
+      newState = newState.filter((e) => e.Package.Id !== action.payload.Id);
+      break;
     case "version":
-      const stateClone: IDownload[] = JSON.parse(JSON.stringify(state));
+      const stateClone: IDownload[] = JSON.parse(JSON.stringify(newState));
 
       const verIndex = stateClone.findIndex(
         (e) => e.Package.Id === action.payload.Package.Id
       );
       stateClone[verIndex].Version = action.payload.Version;
 
-      return stateClone;
-
+      newState = stateClone;
+      break;
     case "clear":
+      localStorage.clear()
       return [];
     default:
       throw new Error();
   }
+  syncLocalStorage(DownloadStateKey, newState);
+  return newState;
 }
 
 const DownloadsWrapper = ({ children }) => {
-  const [state, dispatch] = useReducer(downloadsReducer, []);
+  const [state, dispatch] = useReducer(downloadsReducer, initialDownloadState);
 
   const addPackage = (item: IPackage) => {
     dispatch({ type: "add", payload: item });
